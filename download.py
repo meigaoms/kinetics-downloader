@@ -2,6 +2,7 @@ import argparse, json, os
 
 import lib.config as config
 import lib.parallel_download as parallel
+from lib.cloud_storage import CloudStorage
 
 def maybe_create_dirs():
   """
@@ -56,7 +57,14 @@ def download_classes(classes, num_workers, failed_save_file, compress, verbose, 
     with open(list_path) as file:
       data = json.load(file)
 
-    pool = parallel.Pool(classes, data, save_root, num_workers, failed_save_file, compress, verbose, skip,
+    video_ids_all = list(data.keys())
+    # blob_video = CloudStorage(config.STORAGE_ACCOUNT_NAME, "kinetics700", config.CONNECTION_STRING, config.SAS_TOKEN)
+    # video_stored = [os.path.basename(file_name).replace(".mp4","") for file_name in blob_video.list_blob_names()]
+    blob_image = CloudStorage(config.STORAGE_ACCOUNT_NAME, "kinetics700-image", config.CONNECTION_STRING, config.SAS_TOKEN)
+    image_stored = set([os.path.basename(file_name).split("_frame")[0] for file_name in blob_image.list_blob_names()])
+    data_to_process = {key: val for key, val in data.items() if key not in image_stored}
+
+    pool = parallel.Pool(classes, data_to_process, save_root, num_workers, failed_save_file, compress, verbose, skip,
                          log_file=log_file)
     pool.start_workers()
     pool.feed_videos()

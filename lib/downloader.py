@@ -1,4 +1,7 @@
 import os, subprocess
+import lib.config as config
+from lib.video_to_image import extract_mid_frame
+from lib.cloud_storage import CloudStorage
 
 def download_video(video_id, download_path, video_format="mp4", log_file=None):
   """
@@ -41,6 +44,22 @@ def cut_video(raw_video_path, slice_path, start, end):
 
   return success
 
+def postprocess(video_file):
+  blob_video = CloudStorage(config.STORAGE_ACCOUNT_NAME, "kinetics700", config.CONNECTION_STRING, config.SAS_TOKEN)
+  blob_image = CloudStorage(config.STORAGE_ACCOUNT_NAME, "kinetics700-image", config.CONNECTION_STRING, config.SAS_TOKEN)
+  image_file = extract_mid_frame(video_file, os.path.dirname(video_file))
+  try:
+    blob_video.upload_file(video_file, "/".join(video_file.split("/")[-3:]))
+    os.remove(video_file)
+  except:
+    pass
+  try:
+    blob_image.upload_file(image_file, "/".join(image_file.split("/")[-3:]))
+    os.remove(image_file)
+  except:
+    pass
+  
+
 def compress_video(video_path):
   """
   Compress video.
@@ -72,6 +91,9 @@ def process_video(video_id, directory, start, end, video_format="mp4", compress=
     os.remove(download_path)
 
   # if sliced video already exists, decide what to do next
+  img_files = [f_name for f_name in os.listdir(os.path.dirname(slice_path)) if f_name.endswith(".jpg") and f_name.startswith(video_id)]
+  if img_files:
+    return True
   if os.path.isfile(slice_path):
     if overwrite:
       os.remove(slice_path)
@@ -98,11 +120,14 @@ def process_video(video_id, directory, start, end, video_format="mp4", compress=
   # remove the downloaded video
   os.remove(download_path)
 
+  postprocess(os.path.join(os.getcwd(), slice_path))
+
   if compress:
     # compress the video slice
     return compress_video(slice_path)
 
   return True
+
 
 def download_class_sequential(class_name, videos_dict, directory, compress=False, log_file=None):
   """
